@@ -2,22 +2,18 @@ use csv;
 use imessage_database::message_types::variants::{Reaction, Variant};
 use imessage_database::tables::handle::Handle;
 use imessage_database::{
-    error::table::TableError,
     tables::{
         chat::Chat,
         messages::Message,
-        table::{
-            get_connection, Cacheable, Diagnostic, Table, ATTRIBUTED_BODY, CHAT_MESSAGE_JOIN,
-            MESSAGE, MESSAGE_ATTACHMENT_JOIN, MESSAGE_PAYLOAD, MESSAGE_SUMMARY_INFO,
-        },
+        table::{get_connection, Table, CHAT_MESSAGE_JOIN, MESSAGE, MESSAGE_ATTACHMENT_JOIN},
     },
     util::dirs::default_db_path,
 };
 use rusqlite::{Connection, Statement};
 use serde::Serialize;
 use std::collections::HashMap;
+use std::env;
 use std::fs::File;
-use std::{env, io};
 use std::path::Path;
 use std::process::exit;
 
@@ -46,7 +42,7 @@ fn clean_associated_guid(s: Option<String>) -> Option<String> {
             let mut split = guid.split('/');
             let index_str = split.next();
             let message_id = split.next();
-            let index = str::parse::<usize>(&index_str.unwrap().replace("p:", "")).unwrap_or(0);
+            let _index = str::parse::<usize>(&index_str.unwrap().replace("p:", "")).unwrap_or(0);
             return Some(String::from(message_id.unwrap()));
         } else if guid.starts_with("bp:") {
             return Some(String::from(&guid[3..guid.len()]));
@@ -164,7 +160,7 @@ fn get_gm_id(db: &Connection) -> Option<i32> {
     let db_chats = chats.query_map([], |row| Ok(Chat::from_row(row))).unwrap();
 
     for chat in db_chats {
-        let mut extract_chat = Chat::extract(chat);
+        let extract_chat = Chat::extract(chat);
 
         if let Ok(c) = extract_chat {
             if c.chat_identifier == GM_ID {
@@ -177,7 +173,6 @@ fn get_gm_id(db: &Connection) -> Option<i32> {
 }
 
 fn main() {
-
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
@@ -203,7 +198,7 @@ fn main() {
 
     let path = Path::new("messages.csv");
     let display = path.display();
-    let mut file = match File::create(&path) {
+    let file = match File::create(&path) {
         Err(why) => panic!("couldn't create {}: {}", display, why),
         Ok(file) => file,
     };
@@ -217,7 +212,7 @@ fn main() {
 
     let path = Path::new("reactions.csv");
     let display = path.display();
-    let mut file = match File::create(&path) {
+    let file = match File::create(&path) {
         Err(why) => panic!("couldn't create {}: {}", display, why),
         Ok(file) => file,
     };
