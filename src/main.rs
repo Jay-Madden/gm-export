@@ -207,7 +207,10 @@ fn main() {
     let mut wtr = csv::Writer::from_writer(file);
 
     for message in queried_data.0 {
-        wtr.serialize(message);
+        match wtr.serialize(message) {
+            Ok(_) => (),
+            Err(e) => eprintln!("Serialization of message failed with error {}", e)
+        }
     }
 
     let path = Path::new("reactions.csv");
@@ -220,8 +223,11 @@ fn main() {
 
     let mut wtr = csv::Writer::from_writer(file);
 
-    for message in queried_data.1 {
-        wtr.serialize(message);
+    for reaction in queried_data.1 {
+        match wtr.serialize(reaction) {
+           Ok(_) => (),
+           Err(e) => eprintln!("Serialization of reaction failed with error {}", e)
+        }
     }
 
     println!("Export Complete");
