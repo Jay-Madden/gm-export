@@ -105,7 +105,8 @@ fn get_gm_data(db: &Connection, gm_id: i32) -> (Vec<MessageData>, Vec<ReactionDa
     }
 
     // Handles table doesnt include your own number, add mine here
-    authors.insert(0, String::from("18644046808"));
+    let args: Vec<String> = env::args().collect();
+    authors.insert(0, String::from(&args[1]));
 
     let mut ret_messages = Vec::new();
     let mut ret_reactions = Vec::new();
