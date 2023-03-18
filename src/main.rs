@@ -1,6 +1,7 @@
 use csv;
 use imessage_database::message_types::variants::{Reaction, Variant};
 use imessage_database::tables::handle::Handle;
+use imessage_database::util::dates::get_offset;
 use imessage_database::{
     tables::{
         chat::Chat,
@@ -91,7 +92,10 @@ fn get_gm_data(db: &Connection, gm_id: i32) -> (Vec<MessageData>, Vec<ReactionDa
         .query_map([], |row| Ok(Message::from_row(row)))
         .unwrap();
 
-    let mut handle = Handle::get(&db);
+    let mut handle = match Handle::get(&db) {
+        Ok(h) => h,
+        Err(e) => panic!("Handle failed with error {}", e.to_string()),
+    };
     let handles = handle
         .query_map([], |row| Ok(Handle::from_row(row)))
         .unwrap();
@@ -130,11 +134,16 @@ fn get_gm_data(db: &Connection, gm_id: i32) -> (Vec<MessageData>, Vec<ReactionDa
 
         if let Variant::Normal = msg.variant() {
             let _ = msg.gen_text(&db);
+            let date = msg
+                .date_delivered(&get_offset())
+                .unwrap()
+                .timestamp_millis();
+
             ret_messages.push(MessageData {
                 id: msg.guid,
                 text: msg.text,
                 author,
-                date: msg.date,
+                date,
                 associated_message_guid: msg.associated_message_guid,
                 thread_originator_guid: msg.thread_originator_guid,
             });
@@ -157,7 +166,11 @@ fn get_gm_data(db: &Connection, gm_id: i32) -> (Vec<MessageData>, Vec<ReactionDa
 }
 
 fn get_gm_id(db: &Connection) -> Option<i32> {
-    let mut chats = Chat::get(&db);
+    let mut chats = match Chat::get(&db) {
+        Ok(c) => c,
+        Err(e) => panic!("Failed to get chat db handle with error {}", e.to_string()),
+    };
+
     let db_chats = chats.query_map([], |row| Ok(Chat::from_row(row))).unwrap();
 
     for chat in db_chats {
@@ -210,7 +223,7 @@ fn main() {
     for message in queried_data.0 {
         match wtr.serialize(message) {
             Ok(_) => (),
-            Err(e) => eprintln!("Serialization of message failed with error {}", e)
+            Err(e) => eprintln!("Serialization of message failed with error {}", e),
         }
     }
 
@@ -226,8 +239,8 @@ fn main() {
 
     for reaction in queried_data.1 {
         match wtr.serialize(reaction) {
-           Ok(_) => (),
-           Err(e) => eprintln!("Serialization of reaction failed with error {}", e)
+            Ok(_) => (),
+            Err(e) => eprintln!("Serialization of reaction failed with error {}", e),
         }
     }
 
