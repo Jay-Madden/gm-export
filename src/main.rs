@@ -25,6 +25,7 @@ struct ReactionData {
     message_id: String,
     author: String,
     reaction_type: String,
+    date_given: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -135,7 +136,7 @@ fn get_gm_data(db: &Connection, gm_id: i32) -> (Vec<MessageData>, Vec<ReactionDa
         if let Variant::Normal = msg.variant() {
             let _ = msg.gen_text(&db);
             let date = msg
-                .date_delivered(&get_offset())
+                .date(&get_offset())
                 .unwrap()
                 .timestamp_millis();
 
@@ -148,9 +149,15 @@ fn get_gm_data(db: &Connection, gm_id: i32) -> (Vec<MessageData>, Vec<ReactionDa
                 thread_originator_guid: msg.thread_originator_guid,
             });
         } else if let Variant::Reaction(_, _, react_type) = msg.variant() {
+            let date = msg
+                .date(&get_offset())
+                .unwrap()
+                .timestamp_millis();
+
             ret_reactions.push(ReactionData {
                 message_id: clean_associated_guid(msg.associated_message_guid).unwrap(),
                 author,
+                date_given: date,
                 reaction_type: String::from(match react_type {
                     Reaction::Loved => "Loved",
                     Reaction::Liked => "Liked",
