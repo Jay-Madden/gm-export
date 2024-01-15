@@ -13,10 +13,13 @@ use imessage_database::{
 use rusqlite::{Connection, Statement};
 use serde::Serialize;
 use std::collections::HashMap;
-use std::env;
+use std::{env, io};
 use std::fs::File;
+use std::io::Write;
 use std::path::Path;
 use std::process::exit;
+use reqwest;
+use serde::de::Unexpected::Str;
 
 const GM_ID: &str = "chat62090849848071634";
 
@@ -40,16 +43,16 @@ struct MessageData {
 
 fn clean_associated_guid(s: Option<String>) -> Option<String> {
     if let Some(guid) = s {
-        if guid.starts_with("p:") {
+        return if guid.starts_with("p:") {
             let mut split = guid.split('/');
             let index_str = split.next();
             let message_id = split.next();
             let _index = str::parse::<usize>(&index_str.unwrap().replace("p:", "")).unwrap_or(0);
-            return Some(String::from(message_id.unwrap()));
+            Some(String::from(message_id.unwrap()))
         } else if guid.starts_with("bp:") {
-            return Some(String::from(&guid[3..guid.len()]));
+            Some(String::from(&guid[3..guid.len()]))
         } else {
-            return Some(String::from(guid.as_str()));
+            Some(String::from(guid.as_str()))
         }
     }
     None
@@ -187,6 +190,26 @@ fn get_gm_id(db: &Connection) -> Option<i32> {
     return None;
 }
 
+#[derive(Serialize)]
+struct UploadData<'a> {
+    pub messages: &'a String,
+    pub reactions: &'a String
+}
+
+fn upload_data(messages: &String, reactions: &String) -> Result<bool, reqwest::Error>{
+    let client = reqwest::blocking::Client::new();
+
+    let data = UploadData{messages: messages, reactions: reactions};
+
+    let res = client.post("http://localhost:3000/api/upload/messages")
+        .json(&data)
+        .send()?;
+
+    println!("Data upload finished with code: {}", res.status().to_string());
+
+    return Ok(true);
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
 
@@ -211,39 +234,47 @@ fn main() {
 
     let queried_data = get_gm_data(&db, gm_id);
 
-    let path = Path::new("messages.csv");
-    let display = path.display();
-    let file = match File::create(&path) {
-        Err(why) => panic!("couldn't create {}: {}", display, why),
-        Ok(file) => file,
-    };
-    println!("Writing messages.csv at path {}", display);
+    let mut message_writer = csv::Writer::from_writer(vec![]);
 
-    let mut wtr = csv::Writer::from_writer(file);
-
-    for message in queried_data.0 {
-        match wtr.serialize(message) {
+    for message in queried_data.0.as_slice() {
+        match message_writer.serialize(message) {
             Ok(_) => (),
             Err(e) => eprintln!("Serialization of message failed with error {}", e),
         }
     }
 
-    let path = Path::new("reactions.csv");
-    let display = path.display();
-    let file = match File::create(&path) {
-        Err(why) => panic!("couldn't create {}: {}", display, why),
-        Ok(file) => file,
-    };
-    println!("Writing reactions.csv at path {}", display);
+    let mut reaction_writer = csv::Writer::from_writer(vec![]);
 
-    let mut wtr = csv::Writer::from_writer(file);
-
-    for reaction in queried_data.1 {
-        match wtr.serialize(reaction) {
+    for reaction in queried_data.1.as_slice() {
+        match reaction_writer.serialize(reaction) {
             Ok(_) => (),
             Err(e) => eprintln!("Serialization of reaction failed with error {}", e),
         }
     }
+
+    let message_str = String::from_utf8(message_writer.into_inner().unwrap()).unwrap();
+    let reaction_str = String::from_utf8(reaction_writer.into_inner().unwrap()).unwrap();
+
+    upload_data(&message_str, &reaction_str);
+
+    let path = Path::new("messages.csv");
+    let display = path.display();
+    let mut file = match File::create(&path) {
+        Err(why) => panic!("couldn't create {}: {}", display, why),
+        Ok(file) => file,
+    };
+
+    println!("Writing messages.csv at path {}", display);
+    file.write_all(message_str.as_bytes());
+
+    let path = Path::new("reactions.csv");
+    let display = path.display();
+    let mut file = match File::create(&path) {
+        Err(why) => panic!("couldn't create {}: {}", display, why),
+        Ok(file) => file,
+    };
+    println!("Writing reactions.csv at path {}", display);
+    file.write_all(reaction_str.as_bytes());
 
     println!("Export Complete");
 }
